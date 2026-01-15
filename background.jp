@@ -2,6 +2,8 @@
  * Domain Tab Grouper - Background Script
  */
 
+console.log("Tab Grouper Background Script Loaded (v1.1)");
+
 const DEFAULT_SETTINGS = {
   autoGroup: true,
   excludedDomains: [],
@@ -112,68 +114,107 @@ function isUrlMatch(url, pattern) {
  * タブをドメインまたはカスタムルールに基づいてグループ化する
  */
 async function groupTab(tab) {
-  if (!cachedSettings) await updateCache();
-  if (!cachedSettings.autoGroup) return;
+  try {
+    if (!cachedSettings) await updateCache();
+    if (!cachedSettings.autoGroup) return;
 
-  const url = tab.url;
-  const urlObj = new URL(url);
-  const domain = urlObj.hostname;
+    const url = tab.url;
+    let urlObj;
+    try {
+      urlObj = new URL(url);
+    } catch (e) {
+      return;
+    }
+    const domain = urlObj.hostname;
 
-  if (cachedSettings.excludedDomains.includes(domain)) return;
+    // 除外ドメインの場合は、すでにグループ化されていればグループ解除する
+    if (cachedSettings.excludedDomains.includes(domain)) {
+      if (tab.groupId !== -1) {
+        try {
+          await chrome.tabs.ungroup(tab.id);
+        } catch (e) {
+          // Ignore error
+        }
+      }
+      return;
+    }
 
-  // すでにグループに属している場合はスキップ
-  if (tab.groupId !== -1) return;
+    let groupTitle = "";
+    let groupColor = null;
 
-  let groupTitle = "";
-  let groupColor = null;
-
-  // 1. カスタムルールのチェック (URLパスを含む詳細一致を優先)
-  if (cachedSettings.customRules) {
-    // パターンが長い順にソートして、より詳細な一致を優先する
-    const sortedRules = [...cachedSettings.customRules].sort((a, b) => b.pattern.length - a.pattern.length);
-    for (const rule of sortedRules) {
-      if (isUrlMatch(url, rule.pattern)) {
-        groupTitle = rule.name;
-        groupColor = rule.color;
-        break;
+    // 1. カスタムルールのチェック (URLパスを含む詳細一致を優先)
+    if (cachedSettings.customRules) {
+      // パターンが長い順にソートして、より詳細な一致を優先する
+      const sortedRules = [...cachedSettings.customRules].sort((a, b) => b.pattern.length - a.pattern.length);
+      for (const rule of sortedRules) {
+        if (isUrlMatch(url, rule.pattern)) {
+          groupTitle = rule.name;
+          groupColor = rule.color;
+          break;
+        }
       }
     }
-  }
 
-  // 2. 自動グループ化 (ドメインベース)
-  if (!groupTitle) {
-    groupTitle = getGroupName(url);
-  }
-
-  if (!groupTitle) return;
-
-  // 同じウィンドウ内で同じ名前のグループを探す
-  const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
-  const existingGroup = groups.find((g) => g.title === groupTitle);
-
-  if (existingGroup) {
-    await chrome.tabs.group({ tabIds: tab.id, groupId: existingGroup.id });
-  } else {
-    // 新しいグループを作成
-    const groupId = await chrome.tabs.group({ tabIds: tab.id });
-    const updateOptions = {
-      title: groupTitle,
-      collapsed: cachedSettings.autoCollapse,
-    };
-    if (groupColor) {
-      updateOptions.color = groupColor;
+    // 2. 自動グループ化 (ドメインベース)
+    if (!groupTitle) {
+      groupTitle = getGroupName(url);
     }
-    await chrome.tabGroups.update(groupId, updateOptions);
-  }
 
-  // 重複タブの削除設定がONの場合
-  if (cachedSettings.removeDuplicates) {
-    const tabs = await chrome.tabs.query({ windowId: tab.windowId });
-    const duplicates = tabs.filter((t) => t.url === tab.url && t.id !== tab.id);
-    if (duplicates.length > 0) {
-      const idsToRemove = duplicates.map((t) => t.id);
-      await chrome.tabs.remove(idsToRemove);
+    // グループ名が決まらなかった場合（システムページなど）、グループ解除する
+    if (!groupTitle) {
+      if (tab.groupId !== -1) {
+        try {
+          await chrome.tabs.ungroup(tab.id);
+        } catch (e) {
+          // タブが既に閉じられている場合など、エラーは無視する
+        }
+      }
+      return;
     }
+
+    // すでに正しいグループに属しているか確認
+    if (tab.groupId !== -1) {
+      try {
+        const currentGroup = await chrome.tabGroups.get(tab.groupId);
+        if (currentGroup.title === groupTitle) {
+          return; // すでに正しいグループにいる
+        }
+      } catch (e) {
+        // グループ情報の取得に失敗した場合（グループが存在しないなど）は続行
+      }
+    }
+
+    // 同じウィンドウ内で同じ名前のグループを探す
+    const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
+    const existingGroup = groups.find((g) => g.title === groupTitle);
+
+    if (existingGroup) {
+      await chrome.tabs.group({ tabIds: tab.id, groupId: existingGroup.id });
+    } else {
+      // 新しいグループを作成
+      const groupId = await chrome.tabs.group({ tabIds: tab.id });
+      const updateOptions = {
+        title: groupTitle,
+        collapsed: cachedSettings.autoCollapse,
+      };
+      if (groupColor) {
+        updateOptions.color = groupColor;
+      }
+      await chrome.tabGroups.update(groupId, updateOptions);
+    }
+
+    // 重複タブの削除設定がONの場合
+    if (cachedSettings.removeDuplicates) {
+      const tabs = await chrome.tabs.query({ windowId: tab.windowId });
+      const duplicates = tabs.filter((t) => t.url === tab.url && t.id !== tab.id);
+      if (duplicates.length > 0) {
+        const idsToRemove = duplicates.map((t) => t.id);
+        await chrome.tabs.remove(idsToRemove);
+      }
+    }
+  } catch (err) {
+    // 競合状態やタブドラッグ中のエラー("Tabs cannot be edited right now")などを全面的に無視する
+    // console.log("GroupTab error:", err); 
   }
 }
 
@@ -181,7 +222,7 @@ async function groupTab(tab) {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // changeInfo.url がある場合または status が complete の場合のみ実行
   if ((changeInfo.status === "complete" || changeInfo.url) && tab.url) {
-    groupTab(tab);
+    groupTab(tab).catch(() => {});
   }
 });
 
