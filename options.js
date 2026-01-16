@@ -51,42 +51,105 @@ function renderExclusionList(domains) {
   });
 }
 
-// カスタムルールリストの描画
+// カスタムルールリストの描画 (フラットリスト)
 function renderRuleList(rules) {
   ruleList.innerHTML = "";
-  rules.forEach((rule, index) => {
+  
+  // Flatten rules just in case there are leftover folder structures, or just ignore folders?
+  // Let's filter out any 'folder' types to be safe and only show rules.
+  // Or simpler: Just render them. If user had folders, they might look weird or be hidden if I don't flatten.
+  // Assuming we want to migrate everything to flat. 
+  
+  const flatRules = [];
+  const flatten = (items) => {
+      items.forEach(item => {
+          if (item.type === 'folder') {
+              if (item.children) flatten(item.children);
+          } else {
+              flatRules.push(item);
+          }
+      });
+  };
+  // If rules have no type (old data), they are rules.
+  // If they have type 'rule', they are rules.
+  // If 'folder', flatten.
+  
+  // To avoid modifying 'rules' in place during render loop, let's just render what we have.
+  // But if we want to "abolish" folders, we should probably flatten the view.
+  // However, updating settings would be needed to persist the flattening.
+  // For now, let's just render the top level rules and if there are folders, maybe we should ignore or flatten?
+  // User said "abolish", implying they don't want to use it.
+  // Let's flatten visually.
+  
+  flatten(rules);
+  
+  // NOTE: If we flatten here for display, drag and drop will be messed up unless we also save the flattened list.
+  // Ideally, we should migrate the data once.
+  // But strictly speaking, let's just render the rules.
+  
+  flatRules.forEach((rule, index) => {
     const li = document.createElement("li");
     li.className = "exclusion-item";
     li.draggable = true;
     li.dataset.index = index;
-
+    
     // Drag events
     li.addEventListener("dragstart", handleDragStart);
     li.addEventListener("dragover", handleDragOver);
     li.addEventListener("drop", handleDrop);
     li.addEventListener("dragend", handleDragEnd);
+    li.addEventListener("dragleave", handleDragLeave);
 
-    li.innerHTML = `
-            <div style="display: flex; align-items: center;">
-                <span class="drag-handle" title="ドラッグして並び替え">☰</span>
-                <span style="font-weight: bold; color: ${
-                  rule.color === "grey" ? "#64748b" : rule.color
-                }; margin-right: 8px;">●</span>
-                <span title="${rule.pattern}">${rule.name}</span>
-                <span style="font-size: 11px; color: #64748b; margin-left: 8px;">(${
-                  rule.pattern
-                })</span>
-            </div>
-            <div>
-                <span class="btn-edit-rule" data-index="${index}">編集</span>
-                <span class="btn-remove-rule" data-index="${index}" style="color: #ef4444; cursor: pointer; font-size: 14px;">削除</span>
-            </div>
-        `;
+    const contentDiv = document.createElement("div");
+    contentDiv.className = "rule-content";
+
+    const dragHandle = document.createElement("span");
+    dragHandle.className = "drag-handle";
+    dragHandle.title = "ドラッグして並び替え";
+    dragHandle.textContent = "☰";
+    contentDiv.appendChild(dragHandle);
+
+    const colorDot = document.createElement("span");
+    colorDot.className = "rule-color-dot";
+    colorDot.style.color = rule.color === "grey" ? "#64748b" : rule.color;
+    colorDot.textContent = "●";
+    contentDiv.appendChild(colorDot);
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "rule-name";
+    nameSpan.title = rule.pattern || "";
+    nameSpan.textContent = rule.name;
+    contentDiv.appendChild(nameSpan);
+
+    const patternSpan = document.createElement("span");
+    patternSpan.className = "rule-pattern";
+    patternSpan.textContent = `(${rule.pattern})`;
+    contentDiv.appendChild(patternSpan);
+
+    li.appendChild(contentDiv);
+
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "rule-actions";
+    
+    const editBtn = document.createElement("span");
+    editBtn.className = "action-btn btn-edit-rule";
+    editBtn.dataset.index = index;
+    editBtn.textContent = "編集";
+    actionsDiv.appendChild(editBtn);
+
+    const removeBtn = document.createElement("span");
+    removeBtn.className = "action-btn btn-remove-rule";
+    removeBtn.dataset.index = index;
+    removeBtn.textContent = "削除";
+    actionsDiv.appendChild(removeBtn);
+
+    li.appendChild(actionsDiv);
+
     ruleList.appendChild(li);
   });
 }
 
-// Drag & Drop Handlers
+// Drag & Drop Handlers (Simple Reorder)
 function handleDragStart(e) {
   dragStartIndex = +this.dataset.index;
   e.dataTransfer.effectAllowed = "move";
@@ -94,36 +157,93 @@ function handleDragStart(e) {
 }
 
 function handleDragOver(e) {
-  if (e.preventDefault) {
-    e.preventDefault();
-  }
+  e.preventDefault();
   e.dataTransfer.dropEffect = "move";
-  return false;
+  
+  // Determine drop position (above/below)
+  const rect = this.getBoundingClientRect();
+  const offsetY = e.clientY - rect.top;
+  const height = rect.height;
+  
+  this.classList.remove("drop-above", "drop-below");
+  
+  if (offsetY < height * 0.5) {
+      this.classList.add("drop-above");
+      this.dataset.dropPos = "above";
+  } else {
+      this.classList.add("drop-below");
+      this.dataset.dropPos = "below";
+  }
 }
 
-async function handleDrop(e) {
-  if (e.stopPropagation) {
-    e.stopPropagation();
-  }
-
-  const dragEndIndex = +this.dataset.index;
-  if (dragStartIndex !== dragEndIndex) {
-    const data = await chrome.storage.local.get(["settings"]);
-    const settings = data.settings || DEFAULT_SETTINGS;
-    const rules = [...(settings.customRules || [])];
-
-    // Remove from old position and insert at new position
-    const [movedItem] = rules.splice(dragStartIndex, 1);
-    rules.splice(dragEndIndex, 0, movedItem);
-
-    const updated = await updateSettings({ customRules: rules });
-    renderRuleList(updated.customRules);
-  }
-  return false;
+function handleDragLeave(e) {
+  this.classList.remove("drop-above", "drop-below");
 }
 
 function handleDragEnd() {
   this.classList.remove("dragging");
+  document.querySelectorAll(".drop-above, .drop-below").forEach(el => 
+      el.classList.remove("drop-above", "drop-below")
+  );
+}
+
+async function handleDrop(e) {
+  e.stopPropagation();
+  e.preventDefault();
+  
+  document.querySelectorAll(".drop-above, .drop-below").forEach(el => 
+      el.classList.remove("drop-above", "drop-below")
+  );
+
+  const targetIndex = +this.dataset.index;
+  const dropPos = this.dataset.dropPos || 'below';
+  
+  if (dragStartIndex === targetIndex) return;
+
+  const data = await chrome.storage.local.get(["settings"]);
+  const settings = data.settings || DEFAULT_SETTINGS;
+  
+  // Flatten rules first to match UI indices
+  let allRules = [];
+  const flatten = (items) => {
+      items.forEach(item => {
+          if (item.type === 'folder') {
+              if (item.children) flatten(item.children);
+          } else {
+              allRules.push(item);
+          }
+      });
+  };
+  flatten(settings.customRules || []);
+  
+  // Move item
+  const itemToMove = allRules.splice(dragStartIndex, 1)[0];
+  
+  // Adjust insertion index
+  // If dragging from above target, indices shift down. 
+  // If dragStart < target, removal shifted target down by 1.
+  
+  // Actually, since we spliced from 'allRules', 'targetIndex' refers to the OLD index.
+  // We need to calculate the NEW index in 'allRules'.
+  
+  // Simple Logic:
+  // If dragStart < target, target index becomes target-1.
+  // If dragStart > target, target index stays same.
+  
+  let insertIndex = targetIndex;
+  if (dragStartIndex < targetIndex) {
+      insertIndex--;
+  }
+  
+  if (dropPos === 'below') {
+      insertIndex++;
+  }
+  
+  allRules.splice(insertIndex, 0, itemToMove);
+  
+  // Save flattened rules
+  const updated = await updateSettings({ customRules: allRules });
+  renderRuleList(updated.customRules);
 }
 
 // 設定の保存
@@ -185,7 +305,6 @@ function resetEditMode() {
 
 cancelEditBtn.addEventListener("click", resetEditMode);
 
-// イベントリスナー
 addRuleBtn.addEventListener("click", async () => {
   const pattern = rulePattern.value.trim().toLowerCase();
   const name = ruleName.value.trim();
@@ -194,19 +313,33 @@ addRuleBtn.addEventListener("click", async () => {
   if (pattern && name) {
     const data = await chrome.storage.local.get(["settings"]);
     const settings = data.settings || DEFAULT_SETTINGS;
-    const customRules = settings.customRules || [];
-
-    let newRules;
+    
+    // Check if we need to flatten for edit
+    let allRules = [];
+    const flatten = (items) => {
+        items.forEach(item => {
+            if(item.type === 'folder') {
+                if(item.children) flatten(item.children);
+            } else {
+                allRules.push(item);
+            }
+        });
+    };
+    flatten(settings.customRules || []);
+    // Note: If we are not editing, 'allRules' might just be the loaded rules?
+    // If user adds a rule, we should strictly speaking append to settings.customRules.
+    // BUT if there are folders, we might be appending to a list that contains folders.
+    // If we want to ABOLISH folders, we should convert everything to flat on saving.
+    
+    // Let's assume on Load/Add/Delete we enforce flat structure.
+    
     if (editingIndex !== null) {
-      // 既存ルールの更新
-      newRules = [...customRules];
-      newRules[editingIndex] = { pattern, name, color };
+      allRules[editingIndex] = { ...allRules[editingIndex], pattern, name, color };
     } else {
-      // 新規ルールの追加
-      newRules = [...customRules, { pattern, name, color }];
+      allRules.push({ type: 'rule', pattern, name, color });
     }
 
-    const updated = await updateSettings({ customRules: newRules });
+    const updated = await updateSettings({ customRules: allRules });
     renderRuleList(updated.customRules);
 
     // フォームとモードのリセット
@@ -216,36 +349,57 @@ addRuleBtn.addEventListener("click", async () => {
 
 ruleList.addEventListener("click", async (e) => {
   if (e.target.classList.contains("btn-remove-rule")) {
-    const index = parseInt(e.target.dataset.index);
-    if (!confirm("このルールを削除しますか？")) return;
+    const index = +e.target.dataset.index;
+    if (!confirm("削除しますか？")) return;
 
     const data = await chrome.storage.local.get(["settings"]);
     const settings = data.settings || DEFAULT_SETTINGS;
+    
+    // Flatten first
+    let allRules = [];
+    const flatten = (items) => {
+        items.forEach(item => {
+            if(item.type === 'folder') {
+                if(item.children) flatten(item.children);
+            } else {
+                allRules.push(item);
+            }
+        });
+    };
+    flatten(settings.customRules || []);
 
-    const newRules = settings.customRules.filter((_, i) => i !== index);
+    const newRules = allRules.filter((_, i) => i !== index);
     const updated = await updateSettings({ customRules: newRules });
     renderRuleList(updated.customRules);
 
-    // 編集中のアイテムが削除された場合はリセット
     if (editingIndex === index) {
       resetEditMode();
     }
   } else if (e.target.classList.contains("btn-edit-rule")) {
-    const index = parseInt(e.target.dataset.index);
+    const index = +e.target.dataset.index;
     const data = await chrome.storage.local.get(["settings"]);
     const settings = data.settings || DEFAULT_SETTINGS;
-    const rule = settings.customRules[index];
+    
+    let allRules = [];
+    const flatten = (items) => {
+        items.forEach(item => {
+            if(item.type === 'folder') {
+                if(item.children) flatten(item.children);
+            } else {
+                allRules.push(item);
+            }
+        });
+    };
+    flatten(settings.customRules || []);
 
+    const rule = allRules[index];
     if (rule) {
+      editingIndex = index;
       rulePattern.value = rule.pattern;
       ruleName.value = rule.name;
       ruleColor.value = rule.color;
-      
-      editingIndex = index;
       addRuleBtn.textContent = "変更を保存";
-      cancelEditBtn.style.display = "inline-block"; // flex item but button style applies
-      
-      // フォームへスクロール（必要であれば）
+      cancelEditBtn.style.display = "inline-block";
       rulePattern.focus();
     }
   }
@@ -254,10 +408,22 @@ ruleList.addEventListener("click", async (e) => {
 // エクスポート機能
 exportRulesBtn.addEventListener('click', async () => {
     const data = await chrome.storage.local.get(['settings']);
-    const settings = data.settings || DEFAULT_SETTINGS;
-    const rules = settings.customRules || [];
+    const rules = data.settings?.customRules || [];
+    // Export potentially nested rules? Or flattened?
+    // If we are abolishing, export flat.
+    let allRules = [];
+    const flatten = (items) => {
+        items.forEach(item => {
+            if(item.type === 'folder') {
+                if(item.children) flatten(item.children);
+            } else {
+                allRules.push(item);
+            }
+        });
+    };
+    flatten(rules);
 
-    const blob = new Blob([JSON.stringify(rules, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(allRules, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -281,17 +447,20 @@ importFile.addEventListener('change', (e) => {
     reader.onload = async (event) => {
         try {
             const importedRules = JSON.parse(event.target.result);
-            
-            if (!Array.isArray(importedRules)) {
-                throw new Error('Invalid format: Root must be an array');
-            }
+            if (!Array.isArray(importedRules)) throw new Error('Invalid format');
 
-            // 基本的なバリデーション
-            const validRules = importedRules.filter(rule => 
-                rule.pattern && typeof rule.pattern === 'string' &&
-                rule.name && typeof rule.name === 'string' &&
-                rule.color && typeof rule.color === 'string'
-            );
+            // Flatten validation just in case
+            let validRules = [];
+             const flatten = (items) => {
+                items.forEach(item => {
+                    if (item.type === 'folder') {
+                        if (item.children) flatten(item.children);
+                    } else if (item.pattern && item.name) {
+                        validRules.push(item);
+                    }
+                });
+            };
+            flatten(importedRules);
 
             if (validRules.length === 0) {
                 alert('有効なルールが見つかりませんでした。');
@@ -300,20 +469,32 @@ importFile.addEventListener('change', (e) => {
 
             const data = await chrome.storage.local.get(['settings']);
             const settings = data.settings || DEFAULT_SETTINGS;
-            const currentRules = settings.customRules || [];
+            
+            // Should import merge? Yes.
+            // Also flatten existing rules.
+            let currentRules = [];
+            const flattenCurrent = (items) => {
+                items.forEach(item => {
+                     if (item.type === 'folder') {
+                        if (item.children) flattenCurrent(item.children);
+                    } else {
+                        currentRules.push(item);
+                    }
+                });
+            };
+            flattenCurrent(settings.customRules || []);
 
-            // 既存のルールとマージ
             const newRules = [...currentRules, ...validRules];
             
             const updated = await updateSettings({ customRules: newRules });
             renderRuleList(updated.customRules);
             
             alert(`${validRules.length}件のルールをインポートしました。`);
-            importFile.value = ''; // Reset input to allow same file selection again
+            importFile.value = ''; 
 
         } catch (error) {
             console.error('Import error:', error);
-            alert('ファイルの読み込みに失敗しました。JSON形式が正しいか確認してください。');
+            alert('ファイルの読み込みに失敗しました。');
         }
     };
     reader.readAsText(file);
