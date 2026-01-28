@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Tab Grouper 設定</title>
+    <style>
+      body {
+        font-family: "Noto Sans JP", sans-serif;
+        max-width: 600px;
+        margin: 40px auto;
+        padding: 20px;
+        background: #f8fafc;
+        color: #1e293b;
+      }
+      h1 {
+        color: #2563eb;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 10px;
+      }
+      .section {
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        margin-bottom: 24px;
+      }
+      h2 {
+        font-size: 1.25rem;
+        margin-top: 0;
+      }
+      .exclusion-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        transition: all 0.2s;
+      }
+      .exclusion-item:hover {
+        border-color: #cbd5e1;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      }
+      .drag-handle {
+        cursor: grab;
+        margin-right: 12px;
+        color: #94a3b8;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        padding: 4px;
+      }
+      .drag-handle:hover {
+        color: #64748b;
+        background: #f1f5f9;
+        border-radius: 4px;
+      }
+      .drag-handle:active {
+        cursor: grabbing;
+      }
+      .rule-content {
+        display: flex;
+        align-items: center;
+        flex: 1;
+        overflow: hidden;
+      }
+      .rule-color-dot {
+        font-size: 12px;
+        margin-right: 12px;
+        line-height: 1;
+      }
+      .rule-name {
+        font-weight: 500;
+        color: #334155;
+        margin-right: 8px;
+        white-space: nowrap;
+      }
+      .rule-pattern {
+        font-size: 12px;
+        color: #94a3b8;
+        background: #f8fafc;
+        padding: 2px 6px;
+        border-radius: 4px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .rule-actions {
+        display: flex;
+        gap: 8px;
+        margin-left: 12px;
+      }
+      .action-btn {
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 1px solid transparent;
+      }
+      .btn-edit-rule {
+        color: #3b82f6; 
+        background: #eff6ff;
+      }
+      .btn-edit-rule:hover {
+        background: #dbeafe;
+        color: #2563eb;
+      }
+      .btn-remove-rule {
+        color: #ef4444; 
+        background: #fef2f2;
+      }
+      .btn-remove-rule:hover {
+        background: #fee2e2;
+        color: #dc2626;
+      }
+      .exclusion-item.dragging {
+        opacity: 0.5;
+        background: #f1f5f9;
+        border: 2px dashed #94a3b8;
+      }
+      /* Drop indicators */
+      .drop-above {
+        box-shadow: 0 -3px 0 0 #2563eb;
+        margin-top: 3px; /* Prevent jumpiness */
+        transition: box-shadow 0.1s;
+      }
+      .drop-below {
+        box-shadow: 0 3px 0 0 #2563eb;
+        margin-bottom: 3px;
+        transition: box-shadow 0.1s;
+      }
+      .btn-primary {
+        background: #2563eb;
+        color: white;
+        border: none;
+      }
+      .btn-primary:hover {
+        background: #1d4ed8;
+      }
+      .btn-secondary {
+        background: white;
+        color: #475569;
+        border: 1px solid #cbd5e1;
+      }
+      .btn-secondary:hover {
+        background: #f1f5f9;
+        border-color: #94a3b8;
+        color: #1e293b;
+      }
+      .btn-base {
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Tab Grouper 設定</h1>
+
+    <div class="section">
+      <h2>機能設定</h2>
+      <div class="setting-item">
+        <label for="autoCollapse"
+          >アクティブでないグループを自動で折りたたむ</label
+        >
+        <input type="checkbox" id="autoCollapse" />
+      </div>
+      <div class="setting-item">
+        <label for="removeDuplicates">重複したURLのタブを自動で閉じる</label>
+        <input type="checkbox" id="removeDuplicates" />
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>カスタムグループルール</h2>
+      <p class="description">
+        特定のURLパターンに一致した場合に、指定した名前と色でグループ化します。
+        <br>左側のつまみをドラッグして順番を並び替えることができます。
+      </p>
+      <div class="rule-form">
+        <div class="input-group" style="margin-bottom: 8px">
+          <input
+            type="text"
+            id="rulePattern"
+            placeholder="URLパターン (例: github.com/google)"
+          />
+          <input
+            type="text"
+            id="ruleName"
+            placeholder="グループ名"
+            style="max-width: 120px"
+          />
+        </div>
+        <div class="input-group">
+          <select
+            id="ruleColor"
+            style="padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1"
+          >
+            <option value="grey">グレー</option>
+            <option value="blue">ブルー</option>
+            <option value="red">レッド</option>
+            <option value="yellow">イエロー</option>
+            <option value="green">グリーン</option>
+            <option value="pink">ピンク</option>
+            <option value="purple">パープル</option>
+            <option value="cyan">シアン</option>
+            <option value="orange">オレンジ</option>
+          </select>
+          <button id="addRule" class="btn-base btn-primary">ルールを追加</button>
+          <button id="cancelEdit" class="btn-base btn-secondary" style="display: none;">キャンセル</button>
+        </div>
+      </div>
+      <ul id="ruleList" class="exclusion-list" style="margin-top: 20px">
+        <!-- カスタムルールがここに追加されます -->
+      </ul>
+      <div
+        class="input-group"
+        style="
+          margin-top: 16px;
+          border-top: 1px solid #e2e8f0;
+          padding-top: 16px;
+        "
+      >
+        <button
+          id="exportRules"
+          class="btn-base btn-primary"
+          style="background-color: #0ea5e9; border: none; color: white;"
+        >
+          ルールをエクスポート
+        </button>
+        <button
+          id="importRules"
+          class="btn-base btn-secondary"
+        >
+          ルールをインポート
+        </button>
+        <input
+          type="file"
+          id="importFile"
+          accept=".json"
+          style="display: none"
+        />
+      </div>
+    </div>
+        <input
+          type="file"
+          id="importFile"
+          accept=".json"
+          style="display: none"
+        />
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>除外ドメイン</h2>
+      <p class="description">
+        ここに登録されたドメインのタブは、自動グループ化の対象になりません。
+      </p>
+      <div class="input-group">
+        <input type="text" id="domainInput" placeholder="example.com" />
+        <button id="addDomain" class="btn-add">追加</button>
+      </div>
+      <ul id="exclusionList" class="exclusion-list">
+        <!-- リストアイテムがここに追加されます. -->
+      </ul>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

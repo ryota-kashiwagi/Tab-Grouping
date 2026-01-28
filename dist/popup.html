@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Domain Tab Grouper</title>
+    <style>
+      :root {
+        --primary: #2563eb;
+        --bg: #f8fafc;
+        --text: #1e293b;
+      }
+      body {
+        width: 300px;
+        padding: 16px;
+        font-family: "Noto Sans JP", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        margin: 0;
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .header h1 {
+        font-size: 18px;
+        margin: 0;
+        color: var(--primary);
+      }
+      .card {
+        background: white;
+        padding: 12px;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        margin-bottom: 12px;
+      }
+      .toggle-group {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+      .btn {
+        width: 100%;
+        padding: 10px;
+        border: none;
+        border-radius: 6px;
+        background: var(--primary);
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        transition: opacity 0.2s;
+      }
+      .btn:hover {
+        opacity: 0.9;
+      }
+      .btn-secondary {
+        background: #e2e8f0;
+        color: #475569;
+        margin-top: 8px;
+      }
+      .footer {
+        text-align: center;
+        margin-top: 16px;
+        font-size: 12px;
+        color: #64748b;
+      }
+      /* Simple Switch CSS */
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 20px;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: 0.4s;
+        border-radius: 20px;
+      }
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: 0.4s;
+        border-radius: 50%;
+      }
+      input:checked + .slider {
+        background-color: var(--primary);
+      }
+      input:checked + .slider:before {
+        transform: translateX(20px);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Tab Grouper</h1>
+    </div>
+
+    <div class="card">
+      <div class="toggle-group">
+        <span>自動グループ化</span>
+        <label class="switch">
+          <input type="checkbox" id="autoGroupToggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0">
+        タブを開くたびにドメインで整理します
+      </p>
+    </div>
+
+    <button id="organizeBtn" class="btn">今すぐ全てのタブを整理</button>
+    <button id="optionsBtn" class="btn btn-secondary">設定を開く</button>
+
+    <div class="footer">Domain Tab Grouper v1.0</div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
